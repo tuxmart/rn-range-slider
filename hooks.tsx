@@ -6,8 +6,14 @@ import React, {
   MutableRefObject,
   ReactNode,
 } from 'react';
-import {Animated, I18nManager} from 'react-native';
-import {clamp} from './helpers';
+import {
+  Animated,
+  I18nManager,
+  LayoutChangeEvent,
+  StyleProp,
+  ViewStyle,
+} from 'react-native';
+import { clamp } from './helpers';
 import styles from './styles';
 import FollowerContainer from './LabelContainer';
 
@@ -29,7 +35,7 @@ export const useLowHigh = (
   highProp: number | undefined,
   min: number,
   max: number,
-  step: number,
+  step: number
 ) => {
   const validLowProp = lowProp === undefined ? min : clamp(lowProp, min, max);
   const validHighProp =
@@ -42,8 +48,8 @@ export const useLowHigh = (
     min: validLowProp,
     max: validHighProp,
   });
-  const {low: lowState, high: highState} = inPropsRef.current;
-  const inPropsRefPrev = {lowPrev: lowState, highPrev: highState};
+  const { low: lowState, high: highState } = inPropsRef.current;
+  const inPropsRefPrev = { lowPrev: lowState, highPrev: highState };
 
   // Props have higher priority.
   // If no props are passed, use internal state variables.
@@ -51,11 +57,11 @@ export const useLowHigh = (
   const high = clamp(highProp === undefined ? highState : highProp, min, max);
 
   // Always update values of refs so pan responder will have updated values
-  Object.assign(inPropsRef.current, {low, high, min, max});
+  Object.assign(inPropsRef.current, { low, high, min, max });
 
   const setLow = (value: number) => (inPropsRef.current.low = value);
   const setHigh = (value: number) => (inPropsRef.current.high = value);
-  return {inPropsRef, inPropsRefPrev, setLow, setHigh};
+  return { inPropsRef, inPropsRefPrev, setLow, setHigh };
 };
 
 /**
@@ -66,14 +72,14 @@ export const useLowHigh = (
  */
 export const useWidthLayout = (
   widthRef: MutableRefObject<number>,
-  callback?: (width: number) => void,
+  callback?: (width: number) => void
 ) => {
   return useCallback(
-    ({nativeEvent}) => {
+    ({ nativeEvent }: LayoutChangeEvent) => {
       const {
-        layout: {width},
+        layout: { width },
       } = nativeEvent;
-      const {current: w} = widthRef;
+      const { current: w } = widthRef;
       if (w !== width) {
         widthRef.current = width;
         if (callback) {
@@ -81,7 +87,7 @@ export const useWidthLayout = (
         }
       }
     },
-    [callback, widthRef],
+    [callback, widthRef]
   );
 };
 
@@ -99,44 +105,50 @@ export const useWidthLayout = (
  */
 export const useThumbFollower = (
   containerWidthRef: MutableRefObject<number>,
-  gestureStateRef: MutableRefObject<{lastValue: number; lastPosition: number}>,
+  gestureStateRef: MutableRefObject<{
+    lastValue: number;
+    lastPosition: number;
+  }>,
   renderContent: undefined | ((value: number) => ReactNode),
   isPressed: boolean,
-  allowOverflow: boolean,
-) => {
+  allowOverflow: boolean
+): [
+  JSX.Element | undefined,
+  ((thumbPositionInView: number, value: number) => void) | undefined
+] => {
   const xRef = useRef(new Animated.Value(0));
   const widthRef = useRef(0);
   const contentContainerRef = useRef<FollowerContainer | null>(null);
 
-  const {current: x} = xRef;
+  const { current: x } = xRef;
 
   const update = useCallback(
-    (thumbPositionInView, value) => {
-      const {current: width} = widthRef;
-      const {current: containerWidth} = containerWidthRef;
+    (thumbPositionInView: number, value: number) => {
+      const { current: width } = widthRef;
+      const { current: containerWidth } = containerWidthRef;
       const position = thumbPositionInView - width / 2;
       xRef.current.setValue(
-        allowOverflow ? position : clamp(position, 0, containerWidth - width),
+        allowOverflow ? position : clamp(position, 0, containerWidth - width)
       );
       contentContainerRef.current?.setValue(value);
     },
-    [widthRef, containerWidthRef, allowOverflow],
+    [widthRef, containerWidthRef, allowOverflow]
   );
 
   const handleLayout = useWidthLayout(widthRef, () => {
     update(
       gestureStateRef.current.lastPosition,
-      gestureStateRef.current.lastValue,
+      gestureStateRef.current.lastValue
     );
   });
 
   if (!renderContent) {
-    return [];
+    return [undefined, undefined];
   }
 
-  const transform = {transform: [{translateX: x}]};
+  const transform = { transform: [{ translateX: x }] };
   const follower = (
-    <Animated.View style={[transform, {opacity: isPressed ? 1 : 0}]}>
+    <Animated.View style={[transform, { opacity: isPressed ? 1 : 0 }]}>
       <FollowerContainer
         onLayout={handleLayout}
         ref={contentContainerRef}
@@ -155,32 +167,38 @@ interface InProps {
   step: number;
 }
 
+type RailStyle = {
+  position: ViewStyle['position'];
+  left: Animated.Value;
+  right: Animated.Value;
+};
+
 export const useSelectedRail = (
   inPropsRef: MutableRefObject<InProps>,
   containerWidthRef: MutableRefObject<number>,
   thumbWidth: number,
-  disableRange: boolean,
-) => {
-  const {current: left} = useRef(new Animated.Value(0));
-  const {current: right} = useRef(new Animated.Value(0));
+  disableRange: boolean
+): [styles: RailStyle, update: () => void] => {
+  const { current: left } = useRef(new Animated.Value(0));
+  const { current: right } = useRef(new Animated.Value(0));
   const update = useCallback(() => {
-    const {low, high, min, max} = inPropsRef.current;
-    const {current: containerWidth} = containerWidthRef;
+    const { low, high, min, max } = inPropsRef.current;
+    const { current: containerWidth } = containerWidthRef;
     const fullScale = (max - min) / (containerWidth - thumbWidth);
     const leftValue = (low - min) / fullScale;
     const rightValue = (max - high) / fullScale;
     left.setValue(disableRange ? 0 : leftValue);
     right.setValue(
-      disableRange ? containerWidth - thumbWidth - leftValue : rightValue,
+      disableRange ? containerWidth - thumbWidth - leftValue : rightValue
     );
   }, [inPropsRef, containerWidthRef, disableRange, thumbWidth, left, right]);
-  const styles = useMemo(
+  const styles: RailStyle = useMemo(
     () => ({
       position: 'absolute',
       left: I18nManager.isRTL ? right : left,
       right: I18nManager.isRTL ? left : right,
     }),
-    [left, right],
+    [left, right]
   );
   return [styles, update];
 };
@@ -191,9 +209,9 @@ export const useSelectedRail = (
  */
 export const useLabelContainerProps = (floating: boolean) => {
   const [labelContainerHeight, setLabelContainerHeight] = useState(0);
-  const onLayout = useCallback(({nativeEvent}) => {
+  const onLayout = useCallback(({ nativeEvent }: LayoutChangeEvent) => {
     const {
-      layout: {height},
+      layout: { height },
     } = nativeEvent;
     setLabelContainerHeight(height);
   }, []);
@@ -201,7 +219,7 @@ export const useLabelContainerProps = (floating: boolean) => {
   const top = floating ? -labelContainerHeight : 0;
   const style = [
     floating ? styles.labelFloatingContainer : styles.labelFixedContainer,
-    {top},
+    { top },
   ];
-  return {style, onLayout: onLayout};
+  return { style, onLayout: onLayout };
 };
